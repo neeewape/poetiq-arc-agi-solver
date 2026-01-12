@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from llm_loop_system.analysis_layer import AnalysisLayer
+from llm_loop_system.data_loader import load_jujube_dataset
 from llm_loop_system.llm_layer import LLMLayer
 from llm_loop_system.simulation_layer import SimulationConfig, SimulationLayer
 from llm_loop_system.termination import TerminationModule
@@ -36,12 +37,30 @@ class LoopController:
 
         for it in range(loop_config.max_iterations):
             sim_config = payload.get("simulation_config", {})
+            data_gaps: list[str] = []
+            data_path = sim_config.get("data_path")
+            if data_path:
+                summary, gaps = load_jujube_dataset(data_path)
+                data_gaps.extend(gaps)
+                if summary:
+                    implied_shift = 0.0
+                    if summary.implied_vol is not None:
+                        implied_shift = max(0.0, summary.implied_vol - summary.volatility)
+                    sim_config = {
+                        **sim_config,
+                        "spot_price": summary.spot_price,
+                        "drift": summary.drift,
+                        "volatility": summary.volatility,
+                        "implied_vol_shift": implied_shift,
+                        "data_version": summary.data_version,
+                    }
             scenarios = self._build_scenarios(sim_config)
 
             simulation_result: SimulationResult = self.sim_layer.simulate(
                 llm_output["strategy"],
                 simulation_config=scenarios["baseline"],
                 scenarios=scenarios,
+                data_gaps=data_gaps,
             )
             analysis_report: AnalysisReport = self.analysis_layer.analyze(
                 simulation_result,

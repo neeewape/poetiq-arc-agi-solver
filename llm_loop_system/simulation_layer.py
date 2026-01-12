@@ -20,6 +20,8 @@ class SimulationConfig:
     direction_accuracy: float = 0.9
     risk_free_rate: float = 0.0
     delivery_discount: float = 0.02
+    data_path: str | None = None
+    data_version: str | None = None
 
 
 class SimulationLayer:
@@ -28,10 +30,14 @@ class SimulationLayer:
         strategy: Strategy,
         simulation_config: SimulationConfig,
         scenarios: dict[str, SimulationConfig],
+        data_gaps: list[str] | None = None,
     ) -> SimulationResult:
         run_log: list[str] = []
-        data_gaps: list[str] = []
+        data_gaps = list(data_gaps or [])
         scenario_metrics: dict[str, dict[str, float]] = {}
+
+        if simulation_config.data_version:
+            run_log.append(f"使用数据版本: {simulation_config.data_version}")
 
         for name, config in scenarios.items():
             metrics = self._run_single_scenario(strategy, config, run_log)
