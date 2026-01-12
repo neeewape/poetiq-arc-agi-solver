@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import json
 import os
@@ -13,6 +14,7 @@ from arc_agi.config import CONFIG_LIST
 from arc_agi.io import build_kaggle_two_attempts
 from arc_agi.scoring import score_task
 from arc_agi.solve import solve
+from arc_agi.xlsx_loader import XlsxLoadError, load_xlsx
 
 load_dotenv()
 
@@ -62,7 +64,42 @@ async def _eval_task_data(task_id: str, task: dict) -> tuple[str, Optional[list[
         return task_id, None, None, traceback.format_exc(), time.time() - start
 
 
-async def main():
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run ARC-AGI evaluation or convert XLSX data.")
+    parser.add_argument(
+        "--xlsx-path",
+        default=None,
+        help="Path to an XLSX file to convert into JSON. When set, ARC evaluation is skipped.",
+    )
+    parser.add_argument(
+        "--xlsx-output",
+        default=None,
+        help="Optional output JSON path for the XLSX conversion.",
+    )
+    return parser.parse_args()
+
+
+def _run_xlsx_mode(xlsx_path: str, output_path: Optional[str]) -> None:
+    try:
+        payload = load_xlsx(xlsx_path)
+    except XlsxLoadError as exc:
+        raise SystemExit(f"ERROR: {exc}") from exc
+
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    if output_path is None:
+        output_path = os.path.join(OUTPUT_DIR, f"xlsx_export_{TIMESTAMP}.json")
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+    sheet_counts = {name: len(sheet["rows"]) for name, sheet in payload["sheets"].items()}
+    print(f"Loaded XLSX file: {payload['source_file']}")
+    print(f"Sheets: {', '.join(payload['sheets'].keys())}")
+    print(f"Row counts: {sheet_counts}")
+    print(f"Wrote JSON to: {output_path}")
+
+
+async def _run_arc_mode():
     # Ensure we don't run out of file handles
     # Get current soft and hard limits
     soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -171,5 +208,14 @@ async def main():
     except Exception as e:
         print(f"ERROR: Final write to {OUTPUT} failed: {e}")
 
+
+def main() -> None:
+    args = _parse_args()
+    if args.xlsx_path:
+        _run_xlsx_mode(args.xlsx_path, args.xlsx_output)
+        return
+
+    asyncio.run(_run_arc_mode())
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
