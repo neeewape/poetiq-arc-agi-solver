@@ -15,6 +15,18 @@
 - **终止判定**：基于信息完整性、收益风险阈值与边际改进做停止决策（`llm_loop_system/termination.py`）。
 - **循环控制器**：驱动“生成→仿真→分析→修正→终止”流程（`llm_loop_system/loop_controller.py`）。
 
+## 2.1 闭环流程图
+```mermaid
+flowchart TD
+    Start([开始]) --> LLM[LLM 生成策略]
+    LLM --> Sim[仿真层评估策略]
+    Sim --> Ana[分析层输出优化信号/风险提示]
+    Ana --> Rev[LLM 修正策略]
+    Rev --> Term{终止判定}
+    Term -- 否 --> LLM
+    Term -- 是 --> End([输出最终策略并停止])
+```
+
 ## 3. 快速运行
 ```bash
 python -m llm_loop_system.run_simulation
