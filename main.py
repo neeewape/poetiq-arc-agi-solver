@@ -10,9 +10,8 @@ from typing import Optional
 from dotenv import load_dotenv
 
 from arc_agi.config import CONFIG_LIST
-from arc_agi.io import build_kaggle_two_attempts
+from arc_agi.loop_system import run_closed_loop
 from arc_agi.scoring import score_task
-from arc_agi.solve import solve
 
 load_dotenv()
 
@@ -34,7 +33,9 @@ NUM_PROBLEMS = None
 SELECTED_PROBLEMS = [] # e.g. ['b7999b51']
 
 
-async def _eval_task_data(task_id: str, task: dict) -> tuple[str, Optional[list[dict]], Optional[dict], Optional[str], float]:
+async def _eval_task_data(
+    task_id: str, task: dict, solutions_blob: Optional[dict[str, list]]
+) -> tuple[str, Optional[list[dict]], Optional[dict], Optional[dict], Optional[str], float]:
     """
     Returns: (task_id, kaggle_preds | None on error, tokens | None on error, error, elapsed_seconds)
     """
@@ -46,20 +47,24 @@ async def _eval_task_data(task_id: str, task: dict) -> tuple[str, Optional[list[
         train_out = [ex["output"] for ex in train]
         test_in = [ex["input"] for ex in test]
 
-        results = await solve(train_in, train_out, test_in, problem_id=task_id)
-        kaggle_preds = build_kaggle_two_attempts(results, test_in)
+        loop_result = await run_closed_loop(
+            train_in=train_in,
+            train_out=train_out,
+            test_in=test_in,
+            problem_id=task_id,
+            solutions_blob=solutions_blob,
+        )
 
-        prompt_tokens = sum(r['prompt_tokens'] or 0 for r in results if r)
-        completion_tokens = sum(r['completion_tokens'] or 0 for r in results if r)
-        tokens = {
-            "prompt": prompt_tokens,
-            "completion": completion_tokens,
-            "total": prompt_tokens + completion_tokens
-        }
-
-        return task_id, kaggle_preds, tokens, None, time.time() - start
+        return (
+            task_id,
+            loop_result["kaggle_preds"],
+            loop_result["tokens"],
+            loop_result,
+            None,
+            time.time() - start,
+        )
     except Exception:
-        return task_id, None, None, traceback.format_exc(), time.time() - start
+        return task_id, None, None, None, traceback.format_exc(), time.time() - start
 
 
 async def main():
@@ -104,6 +109,7 @@ async def main():
 
     submission: dict[str, list[dict]] = {}
     tokens_data: dict[str, dict] = {}
+    loop_data: dict[str, dict] = {}
 
     # running scores only if solutions available
     per_task_scores: dict[str, float] = {}
@@ -111,10 +117,13 @@ async def main():
     correct = 0.0
     incorrect = 0.0
 
-    tasks = [asyncio.create_task(_eval_task_data(task_id, task)) for task_id, task in items]
+    tasks = [
+        asyncio.create_task(_eval_task_data(task_id, task, solutions_blob))
+        for task_id, task in items
+    ]
 
     for coro in asyncio.as_completed(tasks):
-        task_id, preds, tokens, err, elapsed = await coro
+        task_id, preds, tokens, loop_result, err, elapsed = await coro
 
         if err is not None or preds is None:
             print(f"! {task_id} (error in {round(elapsed)}s)\n{err}")
@@ -123,6 +132,8 @@ async def main():
             submission[task_id] = preds
             if tokens:
                 tokens_data[task_id] = tokens
+            if loop_result:
+                loop_data[task_id] = loop_result
 
             # running scores if solutions available
             if solutions_blob is not None and task_id in solutions_blob:
@@ -143,6 +154,8 @@ async def main():
                 json.dump(submission, f)
             with open(os.path.join(OUTPUT_DIR, f"tokens_{TIMESTAMP}.json"), "w", encoding="utf-8") as f:
                 json.dump(tokens_data, f)
+            with open(os.path.join(OUTPUT_DIR, f"loop_{TIMESTAMP}.json"), "w", encoding="utf-8") as f:
+                json.dump(loop_data, f)
         except Exception as e:
             print(f"WARNING: Failed to write partial output to {OUTPUT}: {e}")
 
@@ -168,6 +181,9 @@ async def main():
         with open(os.path.join(OUTPUT_DIR, f"tokens_{TIMESTAMP}.json"), "w", encoding="utf-8") as f:
             json.dump(tokens_data, f)
         print(f"Wrote token usage to: {os.path.join(OUTPUT_DIR, f'tokens_{TIMESTAMP}.json')}")
+        with open(os.path.join(OUTPUT_DIR, f"loop_{TIMESTAMP}.json"), "w", encoding="utf-8") as f:
+            json.dump(loop_data, f)
+        print(f"Wrote loop details to: {os.path.join(OUTPUT_DIR, f'loop_{TIMESTAMP}.json')}")
     except Exception as e:
         print(f"ERROR: Final write to {OUTPUT} failed: {e}")
 
