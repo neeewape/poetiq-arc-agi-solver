@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 
 from llm_loop_system.data_loader import load_market_data
@@ -7,7 +8,15 @@ from llm_loop_system.loop_controller import LoopConfig, LoopController
 
 
 def main() -> None:
-    data_summary = load_market_data("红枣期货期权数据.xlsx")
+    parser = argparse.ArgumentParser(description="Run LLM loop simulation.")
+    parser.add_argument(
+        "--data-path",
+        default="红枣期货期权数据.xlsx",
+        help="Excel file containing red-jujube futures/options data.",
+    )
+    args = parser.parse_args()
+
+    data_summary = load_market_data(args.data_path)
 
     payload = {
         "assumptions": [
