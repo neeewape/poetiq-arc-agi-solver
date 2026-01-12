@@ -26,12 +26,10 @@ def main() -> None:
         "simulation_config": {
             "num_paths": 2000,
             "steps": 21,
-            "spot_price": 100.0,
-            "drift": 0.02,
-            "volatility": 0.25,
             "long_term_trend": 0.01,
             "direction_accuracy": 0.9,
             "delivery_discount": 0.02,
+            "data_path": "红枣期货期权数据.xlsx",
         },
     }
 
