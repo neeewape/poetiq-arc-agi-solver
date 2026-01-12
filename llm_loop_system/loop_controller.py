@@ -34,6 +34,7 @@ class LoopController:
 
         llm_output: LLMOutput = self.llm_layer.generate_strategy(payload)
         history: list[dict[str, Any]] = []
+        previous_return: float | None = None
 
         for it in range(loop_config.max_iterations):
             sim_config = payload.get("simulation_config", {})
@@ -72,6 +73,7 @@ class LoopController:
                 analysis_report,
                 iteration_state.__dict__,
                 payload.get("risk_limits", {}),
+                stop_recommendation=llm_output.get("stop_recommendation"),
                 improvement_threshold=loop_config.improvement_threshold,
                 max_no_improve_rounds=loop_config.max_no_improve_rounds,
             )
@@ -82,12 +84,22 @@ class LoopController:
                     "strategy": llm_output["strategy"],
                     "metrics": simulation_result["metrics"],
                     "analysis": analysis_report,
+                    "stop_recommendation": llm_output.get("stop_recommendation"),
                     "decision": decision,
                 }
             )
 
             current_return = simulation_result["metrics"]["returns_metrics"]["annualized_return"]
-            iteration_state.history_improvements.append(current_return)
+            if previous_return is not None:
+                iteration_state.history_improvements.append(current_return - previous_return)
+            previous_return = current_return
+            iteration_state.history_feedback.append(
+                {
+                    "iteration": it + 1,
+                    "analysis": analysis_report,
+                    "decision": decision,
+                }
+            )
 
             if decision["stop_decision"]:
                 break
