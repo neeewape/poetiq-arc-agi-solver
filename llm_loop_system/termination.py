@@ -12,6 +12,7 @@ class TerminationModule:
         analysis_report: AnalysisReport,
         iteration_state: dict[str, Any],
         risk_limits: dict[str, float],
+        stop_recommendation: dict[str, Any] | None = None,
         improvement_threshold: float = 0.01,
         max_no_improve_rounds: int = 3,
     ) -> TerminationDecision:
@@ -25,9 +26,16 @@ class TerminationModule:
 
         if analysis_report["info_requests"]:
             return TerminationDecision(
-                stop_decision=False,
+                stop_decision=True,
                 stop_reason="信息不足，需要补充数据",
                 required_info=analysis_report["info_requests"],
+            )
+
+        if stop_recommendation and stop_recommendation.get("should_stop"):
+            return TerminationDecision(
+                stop_decision=True,
+                stop_reason=stop_recommendation.get("reason", "LLM 建议停止"),
+                required_info=[],
             )
 
         if (
