@@ -1,8 +1,18 @@
 from __future__ import annotations
 
-import json
+import os
+import sys
 
-from llm_loop_system.loop_controller import LoopConfig, LoopController
+_SCRIPT_DIR = os.path.dirname(__file__)
+_PROJECT_ROOT = os.path.dirname(_SCRIPT_DIR)
+if _SCRIPT_DIR in sys.path:
+    sys.path.remove(_SCRIPT_DIR)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
+import json  # noqa: E402
+
+from llm_loop_system.loop_controller import LoopConfig, LoopController  # noqa: E402
 
 
 def main() -> None:
