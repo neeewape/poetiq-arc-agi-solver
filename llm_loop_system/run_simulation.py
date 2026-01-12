@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from llm_loop_system.data_loader import load_market_data
+from llm_loop_system.data_loader import MarketDataSummary, load_market_data
 from llm_loop_system.loop_controller import LoopConfig, LoopController
 
 
@@ -16,7 +16,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    data_summary = load_market_data(args.data_path)
+    try:
+        data_summary = load_market_data(args.data_path)
+    except FileNotFoundError:
+        data_summary = _default_data_summary(args.data_path)
 
     payload = {
         "assumptions": [
@@ -51,6 +54,16 @@ def main() -> None:
     result = controller.run(payload, LoopConfig(max_iterations=5))
     result["data_notes"] = data_summary.notes
     print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def _default_data_summary(data_path: str) -> MarketDataSummary:
+    return MarketDataSummary(
+        spot_price=100.0,
+        drift=0.02,
+        volatility=0.25,
+        implied_vol=None,
+        notes=[f"未找到数据文件 {data_path}，使用默认参数"],
+    )
 
 
 if __name__ == "__main__":
