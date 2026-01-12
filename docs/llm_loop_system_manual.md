@@ -26,6 +26,7 @@ python -m llm_loop_system.run_simulation
 - `assumptions`：市场假设。
 - `strategy_params`：策略初始参数。
 - `risk_limits`：目标收益、最大回撤、尾部风险阈值。
+- `llm_config`：LLM 配置（`model`、`temperature`，也可通过环境变量 `LLM_MODEL` 覆盖）。
 - `simulation_config`：仿真路径数、步数、趋势、方向判断准确率等。
 - `simulation_config.data_path`：数据文件路径（如红枣期货期权数据）。
 
