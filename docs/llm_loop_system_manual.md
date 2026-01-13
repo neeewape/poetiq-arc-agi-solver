@@ -15,6 +15,78 @@
 - **终止判定**：基于信息完整性、收益风险阈值与边际改进做停止决策（`llm_loop_system/termination.py`）。
 - **循环控制器**：驱动“生成→仿真→分析→修正→终止”流程（`llm_loop_system/loop_controller.py`）。
 
+## 2.1 闭环流程图
+```mermaid
+flowchart TD
+    Start([开始]) --> LLM[LLM 生成策略]
+    LLM --> Sim[仿真层评估策略]
+    Sim --> Ana[分析层输出优化信号/风险提示]
+    Ana --> Rev[LLM 修正策略]
+    Rev --> Term{终止判定}
+    Term -- 否 --> LLM
+    Term -- 是 --> End([输出最终策略并停止])
+```
+
+## 2.2 终止判定因果关系图
+```mermaid
+flowchart TD
+    Sim[仿真指标 metrics] -->|data_gaps| InfoReq[分析报告 info_requests]
+    InfoReq -->|非空即停止| StopInfo[终止: 信息不足]
+
+    Sim -->|returns/risk| Threshold[阈值比较]
+    Threshold -->|收益/回撤/尾部风险达标| StopTarget[终止: 达标]
+
+    Ana[分析报告 optimization/risk_alerts] -->|进入 LLM 提示| LLMRev[LLM 修正/建议]
+    LLMRev -->|stop_recommendation| StopLLM[终止: LLM 建议]
+
+    Sim -->|annualized_return 变化| ImproveSeq[边际改进序列]
+    ImproveSeq -->|连续不足| StopImprove[终止: 改进不足]
+
+    StopInfo --> Decision[终止判定]
+    StopTarget --> Decision
+    StopLLM --> Decision
+    StopImprove --> Decision
+```
+
+## 2.3 字段样例（节选）
+**仿真指标（SimulationResult.metrics）**
+```json
+{
+  "returns_metrics": {
+    "annualized_return": 0.084,
+    "monthly_return_avg": 0.007,
+    "sharpe_ratio": 0.92
+  },
+  "risk_metrics": {
+    "max_drawdown": -0.12,
+    "tail_risk_95": -0.04,
+    "loss_distribution": {"p10": -0.02, "p50": 0.006, "p90": 0.03}
+  },
+  "robustness_metrics": {
+    "scenario_consistency": 0.68
+  }
+}
+```
+
+**分析报告（AnalysisReport）**
+```json
+{
+  "analysis_summary": "收益未达标，需要提升收益。",
+  "optimization_signals": ["提升收益率", "提升压力场景稳健性"],
+  "risk_alerts": ["最大回撤超限"],
+  "info_requests": ["补充交易成本假设"]
+}
+```
+
+**终止判定（TerminationDecision）**
+```json
+{
+  "stop_decision": true,
+  "stop_reason": "信息不足，需要补充数据",
+  "required_info": ["补充交易成本假设"]
+}
+```
+
 ## 3. 快速运行
 ```bash
 python -m llm_loop_system.run_simulation
